@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 
 from storage.profiles import get_profile
 from handlers.quiz import start_quiz
+from services.prediction import get_prediction
 
 router = Router()
 
@@ -51,6 +52,20 @@ async def begin_quiz(callback: CallbackQuery, state: FSMContext) -> None:
 async def cmd_test(message: Message, state: FSMContext) -> None:
     await message.answer("Начинаем заново! Отвечай честно 😊")
     await start_quiz(message, state)
+
+
+@router.message(Command("predict"))
+async def cmd_predict(message: Message) -> None:
+    profile = get_profile(message.from_user.id)
+    if not profile:
+        await message.answer("Сначала пройди тест, чтобы узнать свой тип: /start")
+        return
+    wait_msg = await message.answer("Запрашиваю предсказание... 🔮")
+    try:
+        prediction = get_prediction(profile["mbti"])
+        await wait_msg.edit_text(prediction)
+    except Exception as e:
+        await wait_msg.edit_text("Не удалось получить предсказание, попробуй позже 😔")
 
 
 @router.message(Command("profile"))
