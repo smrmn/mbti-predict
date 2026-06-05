@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 async def main() -> None:
-    session = AiohttpSession(proxy="http://127.0.0.1:7897")
+    session = AiohttpSession(proxy=config.PROXY) if config.PROXY else AiohttpSession()
     bot = Bot(token=config.BOT_TOKEN, session=session)
     dp = Dispatcher(storage=MemoryStorage())
 
