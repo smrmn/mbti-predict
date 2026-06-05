@@ -1,0 +1,45 @@
+name: Deploy to server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            # Первый деплой: клонируем репозиторий если его нет
+            if [ ! -d /opt/mbti-predict ]; then
+              git clone git@github.com:smrmn/mbti-predict.git /opt/mbti-predict
+            fi
+
+            cd /opt/mbti-predict
+
+            # Обновляем код
+            git pull origin main
+
+            # Устанавливаем зависимости
+            pip3 install -r requirements.txt
+
+            # Создаём .env если его нет
+            if [ ! -f .env ]; then
+              cat > .env << 'EOF'
+            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+            DAILY_HOUR=9
+            DAILY_MINUTE=0
+            EOF
+            fi
+
+            # Перезапускаем сервис
+            systemctl restart mbti-predict || true
