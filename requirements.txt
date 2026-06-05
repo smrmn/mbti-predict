@@ -1,4 +1,4 @@
-aiogram==3.17.0
+aiogram>=3.0,<3.4
 apscheduler==3.10.4
 anthropic>=0.40.0
 python-dotenv==1.0.1

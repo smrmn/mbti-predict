@@ -18,28 +18,23 @@ jobs:
           script: |
             set -e
 
-            # Первый деплой: клонируем репозиторий если его нет
             if [ ! -d /opt/mbti-predict ]; then
               git clone git@github.com:smrmn/mbti-predict.git /opt/mbti-predict
             fi
 
             cd /opt/mbti-predict
-
-            # Обновляем код
             git pull origin main
 
-            # Устанавливаем зависимости
-            pip3 install -r requirements.txt
+            pip3 install -r requirements.txt --quiet
 
-            # Создаём .env если его нет
-            if [ ! -f .env ]; then
-              cat > .env << 'EOF'
-            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
-            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
-            DAILY_HOUR=9
-            DAILY_MINUTE=0
-            EOF
-            fi
+            {
+              echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}"
+              echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
+              echo "DAILY_HOUR=9"
+              echo "DAILY_MINUTE=0"
+            } > .env
+            chmod 600 .env
 
-            # Перезапускаем сервис
-            systemctl restart mbti-predict || true
+            systemctl restart mbti-predict
+            sleep 3
+            systemctl is-active mbti-predict
