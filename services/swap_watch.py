@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from dataclasses import dataclass
 from datetime import date
 
 import requests
@@ -26,6 +27,25 @@ IDLE, ARMED, FIRED = "idle", "armed", "fired"
 _last_check = 0.0
 
 
+KYBER_URL = "https://aggregator-api.kyberswap.com/ethereum/api/v1/routes"
+# Адреса в Ethereum mainnet и знаки после запятой
+TOKENS = {
+    "ETH": ("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", 18),
+    "WBTC": ("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", 8),
+}
+
+
+@dataclass
+class Quote:
+    """Сколько другой валюты выйдет за позицию целиком."""
+    market: float  # по рыночному курсу
+    dex: float     # котировка агрегатора на эту сумму (с проскальзыванием)
+    gas: float     # газ, в получаемой валюте
+    net: float     # на кошелёк: dex − комиссия кошелька − газ
+    rate: float    # рыночный курс ETH/WBTC
+    source: str    # "kyber" или "coingecko", если агрегатор не ответил
+
+
 def fetch_eth_wbtc_rate() -> float:
     """Сколько WBTC дают за 1 ETH по рыночным ценам CoinGecko."""
     response = requests.get(
@@ -36,6 +56,44 @@ def fetch_eth_wbtc_rate() -> float:
     response.raise_for_status()
     prices = response.json()
     return prices["ethereum"]["usd"] / prices["wrapped-bitcoin"]["usd"]
+
+
+def _kyber_quote(amount: float, asset: str) -> Quote:
+    token_in, dec_in = TOKENS[asset]
+    token_out, dec_out = TOKENS[other(asset)]
+    response = requests.get(
+        KYBER_URL,
+        params={"tokenIn": token_in, "tokenOut": token_out, "amountIn": str(round(amount * 10**dec_in))},
+        headers={"x-client-id": "mbti-predict"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    route = response.json()["data"]["routeSummary"]
+
+    dex = int(route["amountOut"]) / 10**dec_out
+    price_in = float(route["amountInUsd"]) / amount  # рыночные цены агрегатора, USD за единицу
+    price_out = float(route["amountOutUsd"]) / dex
+    gas = float(route["gasUsd"]) / price_out
+    rate = price_in / price_out if asset == "ETH" else price_out / price_in
+    return Quote(
+        market=amount * price_in / price_out,
+        dex=dex,
+        gas=gas,
+        net=dex * (1 - config.SWAP_FEE_PCT / 100) - gas,
+        rate=rate,
+        source="kyber",
+    )
+
+
+def fetch_quote(state: dict) -> Quote:
+    """Котировка обмена всей позиции; агрегатор недоступен — рынок CoinGecko без газа."""
+    try:
+        return _kyber_quote(state["amount"], state["asset"])
+    except Exception as e:
+        logger.warning(f"KyberSwap не ответил, беру CoinGecko: {e}")
+    rate = fetch_eth_wbtc_rate()
+    market = convert(state["amount"], state["asset"], rate)
+    return Quote(market, market, 0.0, market * (1 - config.SWAP_FEE_PCT / 100), rate, "coingecko")
 
 
 def other(asset: str) -> str:
@@ -54,9 +112,8 @@ def convert(amount: float, asset: str, rate: float) -> float:
     return amount * rate if asset == "ETH" else amount / rate
 
 
-def gain_pct(state: dict, rate: float) -> float:
-    """Насколько больше другой валюты выйдет сейчас, чем за неё отдали, в %."""
-    out = convert(state["amount"], state["asset"], rate)
+def gain_pct(state: dict, out: float) -> float:
+    """Насколько больше другой валюты выйдет, чем за неё отдали, в %."""
     return (out / state["base"] - 1) * 100
 
 
@@ -90,20 +147,24 @@ def _pair(state: dict) -> str:
     return f"{state['asset']} → {other(state['asset'])}"
 
 
-def status_text(state: dict, rate: float) -> str:
+def status_text(state: dict, q: Quote) -> str:
     """Текущее положение: позиция, сколько выйдет при обмене, фаза слежения."""
     asset, amount, base = state["asset"], state["amount"], state["base"]
-    out = convert(amount, asset, rate)
-    gain = gain_pct(state, rate)
+    to = other(asset)
     threshold = config.SWAP_GAIN_PCT
     lines = [
-        f"{amount:g} {asset} → <b>{out:.5f} {other(asset)}</b> "
-        f"({gain:+.2f}% к {base:g} {other(asset)})",
-        f"Курс ETH/WBTC: {rate:.6f}",
+        f"{amount:g} {asset} → на кошелёк <b>{q.net:.5f} {to}</b> "
+        f"({gain_pct(state, q.net):+.2f}% к {base:g} {to})",
+        f"По рынку {q.market:.5f} ({gain_pct(state, q.market):+.2f}%), курс ETH/WBTC {q.rate:.6f}",
     ]
+    if q.source == "kyber":
+        lines.append(
+            f"DEX {q.dex:.5f}, комиссия кошелька {config.SWAP_FEE_PCT:g}%, газ {q.gas:.5f} {to}"
+        )
+    else:
+        lines.append(f"Агрегатор не ответил: рынок CoinGecko минус {config.SWAP_FEE_PCT:g}%, без газа")
     if state["phase"] == IDLE:
-        target = base * (1 + threshold / 100)
-        lines.append(f"Жду +{threshold:g}%: {target:.5f} {other(asset)}")
+        lines.append(f"Жду +{threshold:g}% на кошелёк: {base * (1 + threshold / 100):.5f} {to}")
     elif state["phase"] == ARMED:
         lines.append(
             f"Порог пройден, пик {state['peak']:+.2f}%. Напишу при откате "
@@ -114,19 +175,14 @@ def status_text(state: dict, rate: float) -> str:
     return "\n".join(lines)
 
 
-def alert_text(kind: str, state: dict, rate: float) -> str:
-    gain = gain_pct(state, rate)
+def alert_text(kind: str, state: dict, q: Quote) -> str:
+    gain = gain_pct(state, q.net)
     if kind == "trail":
-        head = (
-            f"🔔 {_pair(state)}: откат от пика\n"
-            f"Пик был {state['peak']:+.2f}%, сейчас {gain:+.2f}%"
-        )
+        head = f"🔔 {_pair(state)}: откат от пика"
     else:
-        head = (
-            f"⚠️ {_pair(state)}: вернулся к порогу +{config.SWAP_GAIN_PCT:g}%\n"
-            f"Пик был {state['peak']:+.2f}%, сейчас {gain:+.2f}%"
-        )
-    return head + "\n\n" + status_text(state, rate)
+        head = f"⚠️ {_pair(state)}: вернулся к порогу +{config.SWAP_GAIN_PCT:g}%"
+    head += f"\nПик был {state['peak']:+.2f}%, сейчас {gain:+.2f}% на кошелёк"
+    return head + "\n\n" + status_text(state, q)
 
 
 def _load_state() -> dict:
@@ -194,15 +250,15 @@ async def check_swap(bot: Bot) -> None:
     _last_check = time.monotonic()
 
     try:
-        rate = fetch_eth_wbtc_rate()
+        q = fetch_quote(state)
     except Exception as e:
         logger.warning(f"Не удалось получить курс ETH/WBTC: {e}")
         return
 
     before = dict(state)
-    kind = step(state, gain_pct(state, rate))
+    kind = step(state, gain_pct(state, q.net))
     if kind:
-        await bot.send_message(chat_id=state["chat_id"], text=alert_text(kind, state, rate), parse_mode="HTML")
+        await bot.send_message(chat_id=state["chat_id"], text=alert_text(kind, state, q), parse_mode="HTML")
         logger.info(f"Слежение {_pair(state)}: {kind}, пик {state['peak']:+.2f}%")
     if state != before:
         _save_state(state)

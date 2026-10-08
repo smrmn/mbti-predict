@@ -5,7 +5,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
 from services.swap_watch import (
-    fetch_eth_wbtc_rate,
+    fetch_quote,
     get_state,
     is_owner,
     other,
@@ -24,12 +24,13 @@ async def cmd_swap(message: Message) -> None:
     if not is_owner(message.from_user):
         return
     remember_owner(message.chat.id)
+    state = get_state()
     try:
-        rate = fetch_eth_wbtc_rate()
+        q = fetch_quote(state)
     except Exception:
         await message.answer("Не удалось получить курс, попробуй позже")
         return
-    await message.answer(status_text(get_state(), rate), parse_mode="HTML")
+    await message.answer(status_text(state, q), parse_mode="HTML")
 
 
 @router.message(Command("bought"))
