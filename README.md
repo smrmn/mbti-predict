@@ -126,3 +126,34 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 DAILY_HOUR=9        # Час рассылки (МСК, 24h формат)
 DAILY_MINUTE=0      # Минута рассылки
 ```
+
+## Деплой
+
+Источник правды — GitHub (`smrmn/mbti-predict`). Push в `main` запускает
+`.github/workflows/deploy.yml`, тот заходит на сервер по SSH, и
+`deploy/deploy.sh` делает всё остальное:
+
+```bash
+git push origin main
+```
+
+Скрипт забирает `main` с GitHub в bare-репу, обновляет рабочее дерево
+`/opt/mbti-predict`, доставляет зависимости в `.venv` (Python 3.11 через `uv`)
+и перезапускает `mbti-predict.service`. Если сервис не поднялся, job в Actions
+краснеет с хвостом журнала. Перевыкатить без коммита — Actions → Deploy → Run
+workflow, или на сервере `mbti-predict-deploy`.
+
+Прямой push на сервер отключён: `pre-receive` в bare-репе его отклоняет,
+чтобы история не разъехалась с GitHub.
+
+| Что | Где |
+|---|---|
+| Bare-репа (зеркало GitHub) | `/var/repo/mbti-predict.git` |
+| Скрипт выкатки | `/usr/local/bin/mbti-predict-deploy` (копия `deploy/deploy.sh`) |
+| Доступ Actions к серверу | ключ в `authorized_keys` с `command="mbti-predict-deploy"`; секреты `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_KNOWN_HOSTS` |
+| Рабочее дерево | `/opt/mbti-predict` |
+| Профили пользователей | `/var/lib/mbti-predict/profiles` (`PROFILES_DIR`) |
+| Секреты | `/etc/mbti-predict.env` |
+| Логи | `journalctl -u mbti-predict -f` |
+
+Данные лежат вне рабочего дерева, поэтому `git checkout -f` при деплое их не трогает.

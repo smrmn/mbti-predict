@@ -4,7 +4,7 @@ import json
 import os
 from datetime import date
 
-PROFILES_DIR = os.path.join(os.path.dirname(__file__), "..", "profiles")
+PROFILES_DIR = os.getenv("PROFILES_DIR") or os.path.join(os.path.dirname(__file__), "..", "profiles")
 
 
 def _path(user_id: int) -> str:

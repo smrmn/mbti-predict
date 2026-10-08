@@ -1,0 +1,19 @@
+[Unit]
+Description=MBTI Predict Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mbti-predict
+EnvironmentFile=/etc/mbti-predict.env
+# Профили живут вне рабочего дерева: выкатка их не трогает
+Environment=PROFILES_DIR=/var/lib/mbti-predict/profiles
+ExecStart=/opt/mbti-predict/.venv/bin/python /opt/mbti-predict/bot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

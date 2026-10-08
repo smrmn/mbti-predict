@@ -1,40 +1,24 @@
-name: Deploy to server
+name: Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-
-            if [ ! -d /opt/mbti-predict ]; then
-              git clone https://github.com/smrmn/mbti-predict.git /opt/mbti-predict
-            fi
-
-            cd /opt/mbti-predict
-            git pull origin main
-
-            pip3 install -r requirements.txt --quiet
-
-            {
-              echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}"
-              echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
-              echo "DAILY_HOUR=9"
-              echo "DAILY_MINUTE=0"
-            } > .env
-            chmod 600 .env
-
-            systemctl restart mbti-predict
-            sleep 3
-            systemctl is-active mbti-predict
+      - name: Выкатить на сервер
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Команду выбирает сервер: ключ привязан к mbti-predict-deploy и больше ничего не умеет
+          ssh -i ~/.ssh/deploy "root@$HOST"
