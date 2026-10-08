@@ -29,10 +29,12 @@ if grep -q '^BOT_TOKEN=.\+' /etc/mbti-predict.env \
   systemctl enable -q mbti-predict
   systemctl restart mbti-predict
   # Падение на импорте наступает не сразу, а Restart=always тут же поднимает сервис снова:
-  # ждём дольше и считаем, что живой — это active и ни одного рестарта
+  # живой — это active и тот же процесс, что запустили. NRestarts тут не годится —
+  # systemd на сервере не обнуляет его при ручном рестарте.
+  PID=$(systemctl show -p MainPID --value mbti-predict)
   sleep 10
   if ! systemctl is-active -q mbti-predict \
-     || [ "$(systemctl show -p NRestarts --value mbti-predict)" != 0 ]; then
+     || [ "$(systemctl show -p MainPID --value mbti-predict)" != "$PID" ]; then
     journalctl -u mbti-predict -n 20 --no-pager; exit 1
   fi
   echo "[mbti-predict] deployed to $TREE, service running"
