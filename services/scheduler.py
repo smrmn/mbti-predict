@@ -5,6 +5,7 @@ from aiogram import Bot
 import config
 from storage.profiles import get_all_users
 from services.prediction import get_prediction
+from services.swap_watch import check_swap
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,14 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         minute=config.DAILY_MINUTE,
         kwargs={"bot": bot},
     )
+    if config.SWAP_CHAT_ID:
+        scheduler.add_job(
+            check_swap,
+            trigger="interval",
+            minutes=config.SWAP_CHECK_MINUTES,
+            kwargs={"bot": bot},
+        )
+        logger.info(f"Слежение ETH → WBTC: раз в {config.SWAP_CHECK_MINUTES} мин")
     scheduler.start()
     logger.info(f"Планировщик запущен: рассылка в {config.DAILY_HOUR:02d}:{config.DAILY_MINUTE:02d} МСК")
     return scheduler

@@ -10,3 +10,11 @@ OPENROUTER_API_KEY: str = os.environ["OPENROUTER_API_KEY"]
 DAILY_HOUR: int = int(os.getenv("DAILY_HOUR", "9"))
 DAILY_MINUTE: int = int(os.getenv("DAILY_MINUTE", "0"))
 PROXY: str | None = os.getenv("PROXY")
+
+# Слежение за обменом ETH → WBTC. Без SWAP_CHAT_ID выключено.
+SWAP_CHAT_ID: int | None = int(os.environ["SWAP_CHAT_ID"]) if os.getenv("SWAP_CHAT_ID") else None
+SWAP_ETH_AMOUNT: float = float(os.getenv("SWAP_ETH_AMOUNT", "0"))
+SWAP_WBTC_BASE: float = float(os.getenv("SWAP_WBTC_BASE", "0"))
+SWAP_GAIN_PCT: float = float(os.getenv("SWAP_GAIN_PCT", "2"))
+SWAP_CHECK_MINUTES: int = int(os.getenv("SWAP_CHECK_MINUTES", "5"))
+SWAP_STATE_FILE: str = os.getenv("SWAP_STATE_FILE", "swap_watch.json")

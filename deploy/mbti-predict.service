@@ -9,6 +9,7 @@ WorkingDirectory=/opt/mbti-predict
 EnvironmentFile=/etc/mbti-predict.env
 # Профили живут вне рабочего дерева: выкатка их не трогает
 Environment=PROFILES_DIR=/var/lib/mbti-predict/profiles
+Environment=SWAP_STATE_FILE=/var/lib/mbti-predict/swap_watch.json
 ExecStart=/opt/mbti-predict/.venv/bin/python /opt/mbti-predict/bot.py
 Restart=always
 RestartSec=5

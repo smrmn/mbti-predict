@@ -6,7 +6,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.memory import MemoryStorage
 
 import config
-from handlers import start, quiz
+from handlers import start, quiz, swap
 from services.scheduler import setup_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +19,7 @@ async def main() -> None:
 
     dp.include_router(start.router)
     dp.include_router(quiz.router)
+    dp.include_router(swap.router)
 
     setup_scheduler(bot)
 
