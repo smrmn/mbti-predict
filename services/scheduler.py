@@ -37,10 +37,10 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         scheduler.add_job(
             check_swap,
             trigger="interval",
-            minutes=config.SWAP_CHECK_MINUTES,
+            minutes=1,  # взведённое — каждую минуту, остальное check_swap прореживает сам
             kwargs={"bot": bot},
         )
-        logger.info(f"Слежение ETH → WBTC: раз в {config.SWAP_CHECK_MINUTES} мин")
+        logger.info(f"Слежение ETH ↔ WBTC: раз в {config.SWAP_CHECK_MINUTES} мин, после порога — раз в минуту")
     scheduler.start()
     logger.info(f"Планировщик запущен: рассылка в {config.DAILY_HOUR:02d}:{config.DAILY_MINUTE:02d} МСК")
     return scheduler
