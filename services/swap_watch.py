@@ -44,11 +44,13 @@ def status_text(rate: float) -> str:
 
 
 def _load_state() -> dict:
+    state = {"notified": False, "chat_id": None}
     try:
         with open(config.SWAP_STATE_FILE, encoding="utf-8") as f:
-            return json.load(f)
+            state.update(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"notified": False}
+        pass
+    return state
 
 
 def _save_state(state: dict) -> None:
@@ -57,8 +59,23 @@ def _save_state(state: dict) -> None:
         json.dump(state, f)
 
 
+def is_owner(user) -> bool:
+    return bool(config.SWAP_OWNER) and (user.username or "").lower() == config.SWAP_OWNER
+
+
+def remember_owner(chat_id: int) -> None:
+    state = _load_state()
+    if state["chat_id"] != chat_id:
+        state["chat_id"] = chat_id
+        _save_state(state)
+        logger.info("Слежение ETH → WBTC: запомнил чат владельца")
+
+
 async def check_swap(bot: Bot) -> None:
     """Уведомляет один раз при пересечении цели; снова — только после возврата ниже неё."""
+    state = _load_state()
+    if not state["chat_id"]:
+        return  # владелец ещё не писал /swap — слать некуда
     try:
         rate = fetch_eth_wbtc_rate()
     except Exception as e:
@@ -66,14 +83,14 @@ async def check_swap(bot: Bot) -> None:
         return
 
     reached = config.SWAP_ETH_AMOUNT * rate >= target_wbtc()
-    state = _load_state()
 
     if reached and not state["notified"]:
         await bot.send_message(
-            chat_id=config.SWAP_CHAT_ID,
+            chat_id=state["chat_id"],
             text="🔔 ETH → WBTC: цель достигнута\n\n" + status_text(rate),
             parse_mode="HTML",
         )
         logger.info(f"ETH/WBTC: цель достигнута, курс {rate:.6f}")
     if reached != state["notified"]:
-        _save_state({"notified": reached})
+        state["notified"] = reached
+        _save_state(state)

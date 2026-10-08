@@ -33,7 +33,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         minute=config.DAILY_MINUTE,
         kwargs={"bot": bot},
     )
-    if config.SWAP_CHAT_ID:
+    if config.SWAP_OWNER:
         scheduler.add_job(
             check_swap,
             trigger="interval",

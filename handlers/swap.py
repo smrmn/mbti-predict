@@ -4,17 +4,17 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-import config
-from services.swap_watch import fetch_eth_wbtc_rate, status_text
+from services.swap_watch import fetch_eth_wbtc_rate, is_owner, remember_owner, status_text
 
 router = Router()
 
 
 @router.message(Command("swap"))
 async def cmd_swap(message: Message) -> None:
-    # Позиция личная: показываем только тому, кому шлём уведомления
-    if message.from_user.id != config.SWAP_CHAT_ID:
+    # Позиция личная: только владельцу. Его же чат запоминаем для уведомлений
+    if not is_owner(message.from_user):
         return
+    remember_owner(message.chat.id)
     try:
         rate = fetch_eth_wbtc_rate()
     except Exception:
