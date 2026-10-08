@@ -28,8 +28,13 @@ if grep -q '^BOT_TOKEN=.\+' /etc/mbti-predict.env \
    && grep -q '^OPENROUTER_API_KEY=.\+' /etc/mbti-predict.env; then
   systemctl enable -q mbti-predict
   systemctl restart mbti-predict
-  sleep 3
-  systemctl is-active -q mbti-predict || { journalctl -u mbti-predict -n 20 --no-pager; exit 1; }
+  # Падение на импорте наступает не сразу, а Restart=always тут же поднимает сервис снова:
+  # ждём дольше и считаем, что живой — это active и ни одного рестарта
+  sleep 10
+  if ! systemctl is-active -q mbti-predict \
+     || [ "$(systemctl show -p NRestarts --value mbti-predict)" != 0 ]; then
+    journalctl -u mbti-predict -n 20 --no-pager; exit 1
+  fi
   echo "[mbti-predict] deployed to $TREE, service running"
 else
   echo "[mbti-predict] deployed to $TREE"
