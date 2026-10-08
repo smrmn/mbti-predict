@@ -147,42 +147,47 @@ def _pair(state: dict) -> str:
     return f"{state['asset']} → {other(state['asset'])}"
 
 
+def _money_line(state: dict, q: Quote) -> str:
+    """Главное: сколько придёт на кошелёк и выгода."""
+    return (
+        f"💰 <b>{q.net:.5f} {other(state['asset'])}</b> на кошелёк "
+        f"(<b>{gain_pct(state, q.net):+.2f}%</b>)"
+    )
+
+
+def _position_line(state: dict) -> str:
+    return f"за {state['amount']:g} {state['asset']} · было {state['base']:g} {other(state['asset'])}"
+
+
+def _fallback_line(q: Quote) -> list[str]:
+    return [] if q.source == "kyber" else ["<i>без газа: агрегатор не ответил</i>"]
+
+
 def status_text(state: dict, q: Quote) -> str:
-    """Текущее положение: позиция, сколько выйдет при обмене, фаза слежения."""
-    asset, amount, base = state["asset"], state["amount"], state["base"]
-    to = other(asset)
+    """Текущее положение: сколько придёт на кошелёк и фаза слежения."""
+    base, to = state["base"], other(state["asset"])
     threshold = config.SWAP_GAIN_PCT
-    lines = [
-        f"{amount:g} {asset} → на кошелёк <b>{q.net:.5f} {to}</b> "
-        f"({gain_pct(state, q.net):+.2f}% к {base:g} {to})",
-        f"По рынку {q.market:.5f} ({gain_pct(state, q.market):+.2f}%), курс ETH/WBTC {q.rate:.6f}",
-    ]
-    if q.source == "kyber":
-        lines.append(
-            f"DEX {q.dex:.5f}, комиссия кошелька {config.SWAP_FEE_PCT:g}%, газ {q.gas:.5f} {to}"
-        )
-    else:
-        lines.append(f"Агрегатор не ответил: рынок CoinGecko минус {config.SWAP_FEE_PCT:g}%, без газа")
     if state["phase"] == IDLE:
-        lines.append(f"Жду +{threshold:g}% на кошелёк: {base * (1 + threshold / 100):.5f} {to}")
+        phase = f"Жду +{threshold:g}%: {base * (1 + threshold / 100):.5f} {to}"
     elif state["phase"] == ARMED:
-        lines.append(
-            f"Порог пройден, пик {state['peak']:+.2f}%. Напишу при откате "
-            f"до {state['peak'] - config.SWAP_TRAIL_PCT:+.2f}% или возврате к +{threshold:g}%"
+        phase = (
+            f"Пик {state['peak']:+.2f}%, напишу при откате до "
+            f"{state['peak'] - config.SWAP_TRAIL_PCT:+.2f}% или спуске ниже +{threshold:g}%"
         )
     else:
-        lines.append(f"Уже написал. Снова начну следить, когда выгода опустится ниже +{threshold:g}%")
-    return "\n".join(lines)
+        phase = f"Уже написал, снова — после спуска ниже +{threshold:g}%"
+    return "\n".join([_money_line(state, q), _position_line(state), phase] + _fallback_line(q))
 
 
 def alert_text(kind: str, state: dict, q: Quote) -> str:
-    gain = gain_pct(state, q.net)
     if kind == "trail":
-        head = f"🔔 {_pair(state)}: откат от пика"
+        head = f"🔔 <b>{_pair(state)}: откат от пика</b>"
     else:
-        head = f"⚠️ {_pair(state)}: вернулся к порогу +{config.SWAP_GAIN_PCT:g}%"
-    head += f"\nПик был {state['peak']:+.2f}%, сейчас {gain:+.2f}% на кошелёк"
-    return head + "\n\n" + status_text(state, q)
+        head = f"⚠️ <b>{_pair(state)}: спуск к порогу +{config.SWAP_GAIN_PCT:g}%</b>"
+    return "\n".join(
+        [head, _money_line(state, q), f"Пик был {state['peak']:+.2f}%", _position_line(state)]
+        + _fallback_line(q)
+    )
 
 
 def _load_state() -> dict:
