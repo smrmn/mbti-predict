@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from datetime import date
 
 import requests
 from aiogram import Bot
@@ -172,7 +173,11 @@ def remember_owner(chat_id: int) -> None:
 def record_purchase(amount: float, asset: str) -> tuple[dict, dict]:
     """Обмен сделан: купили amount asset за всё, что было на руках. Слежение — в обратную сторону."""
     old = _load_state()
-    new = dict(old, asset=asset, amount=amount, base=old["amount"], phase=IDLE, peak=None)
+    history = old.get("history", []) + [
+        {"date": str(date.today()), "sold": old["amount"], "sold_asset": old["asset"],
+         "bought": amount, "bought_asset": asset}
+    ]
+    new = dict(old, asset=asset, amount=amount, base=old["amount"], phase=IDLE, peak=None, history=history)
     _save_state(new)
     logger.info(f"Слежение ETH ↔ WBTC: куплено {amount:g} {asset}")
     return old, new
