@@ -13,6 +13,7 @@ from services.swap_watch import (
     record_purchase,
     remember_owner,
     status_text,
+    swap_keyboard,
 )
 
 router = Router()
@@ -30,7 +31,7 @@ async def cmd_swap(message: Message) -> None:
     except Exception:
         await message.answer("Не удалось получить курс, попробуй позже")
         return
-    await message.answer(status_text(state, q), parse_mode="HTML")
+    await message.answer(status_text(state, q), parse_mode="HTML", reply_markup=swap_keyboard(state))
 
 
 @router.message(Command("bought"))

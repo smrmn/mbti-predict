@@ -9,6 +9,7 @@ from datetime import date
 
 import requests
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 
@@ -32,6 +33,15 @@ KYBER_URL = "https://aggregator-api.kyberswap.com/ethereum/api/v1/routes"
 TOKENS = {
     "ETH": ("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", 18),
     "WBTC": ("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", 8),
+}
+
+
+# Экран обмена в MetaMask Mobile: handleSwapUrl в MetaMask/metamask-mobile.
+# from/to — CAIP-19, amount — в минимальных единицах; работает без подписи ссылки
+METAMASK_SWAP_URL = "https://link.metamask.io/swap"
+CAIP = {
+    "ETH": "eip155:1/slip44:60",
+    "WBTC": "eip155:1/erc20:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
 }
 
 
@@ -163,6 +173,22 @@ def _fallback_line(q: Quote) -> list[str]:
     return [] if q.source == "kyber" else ["<i>без газа: агрегатор не ответил</i>"]
 
 
+def swap_keyboard(state: dict) -> InlineKeyboardMarkup:
+    """Кнопка, открывающая обмен всей позиции в MetaMask; подтверждает владелец."""
+    asset = state["asset"]
+    amount = state["amount"]
+    if asset == "ETH":
+        amount -= config.SWAP_GAS_RESERVE_ETH  # иначе нечем платить за газ
+    dec = TOKENS[asset][1]
+    url = (
+        f"{METAMASK_SWAP_URL}?from={CAIP[asset]}&to={CAIP[other(asset)]}"
+        f"&amount={max(round(amount * 10**dec), 0)}"
+    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🦊 Обменять {_pair(state)} в MetaMask", url=url)]
+    ])
+
+
 def status_text(state: dict, q: Quote) -> str:
     """Текущее положение: сколько придёт на кошелёк и фаза слежения."""
     base, to = state["base"], other(state["asset"])
@@ -263,7 +289,10 @@ async def check_swap(bot: Bot) -> None:
     before = dict(state)
     kind = step(state, gain_pct(state, q.net))
     if kind:
-        await bot.send_message(chat_id=state["chat_id"], text=alert_text(kind, state, q), parse_mode="HTML")
+        await bot.send_message(
+            chat_id=state["chat_id"], text=alert_text(kind, state, q), parse_mode="HTML",
+            reply_markup=swap_keyboard(state),
+        )
         logger.info(f"Слежение {_pair(state)}: {kind}, пик {state['peak']:+.2f}%")
     if state != before:
         _save_state(state)

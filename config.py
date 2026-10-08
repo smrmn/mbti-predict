@@ -21,5 +21,7 @@ SWAP_GAIN_PCT: float = float(os.getenv("SWAP_GAIN_PCT", "2"))
 SWAP_TRAIL_PCT: float = float(os.getenv("SWAP_TRAIL_PCT", "1"))
 # Комиссия кошелька за обмен: MetaMask Swaps — 0.875%, напрямую через агрегатор — 0
 SWAP_FEE_PCT: float = float(os.getenv("SWAP_FEE_PCT", "0.875"))
+# Сколько ETH не трогать в кнопке обмена ETH → WBTC: на газ
+SWAP_GAS_RESERVE_ETH: float = float(os.getenv("SWAP_GAS_RESERVE_ETH", "0.005"))
 SWAP_CHECK_MINUTES: int = int(os.getenv("SWAP_CHECK_MINUTES", "5"))
 SWAP_STATE_FILE: str = os.getenv("SWAP_STATE_FILE", "swap_watch.json")
